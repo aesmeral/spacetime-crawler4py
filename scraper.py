@@ -1,4 +1,5 @@
 import re
+from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
 def scraper(url, resp):
@@ -7,7 +8,18 @@ def scraper(url, resp):
 
 def extract_next_links(url, resp):
     # Implementation requred.
-    return list()
+    links = []
+    if resp.status in range(200,300):                       # we're getting a successful response from the url.
+        content = resp.raw_response.content                 # grab the html content from the url
+        soup = BeautifulSoup(content, "html.parser")        # soup the content
+        for a in soup.find_all('a', href=True):             # find all links
+            links.append(a['href'])
+        for i in range(len(links)):                         # reformat all found links if needed
+            links[i] = define_url(url, links[i])
+        for link in links:
+            if is_valid(link) == False:
+                links.remove(link)
+    return links
 
 def is_valid(url):
     try:
@@ -27,3 +39,21 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+
+"""
+    base -> the url given from the frontier
+    path -> url(s) from the frontier's html code
+    
+    (1) if ... it has no scheme and it has no netloc, meaning that it must be in form --- /xyz --- (meaning that it is a path from the base url)
+    (2) elif ... it has no scheme but is in form --- //*.asdfasdf.* (meaning that it might be another website but formated wrong)
+    (3) it takes on the form of http://www.somewebsite.com/random... so just return it as is.
+"""
+def define_url(base, path):
+    base_parsed = urlparse(base)
+    path_parsed = urlparse(path)
+    if path_parsed.scheme == "" and path_parsed.netloc == "":
+        return base + path
+    elif path_parsed.scheme == "" and path_parsed.netloc is not "":
+        return base_parsed.scheme + ":" + path
+    else:
+        return path
