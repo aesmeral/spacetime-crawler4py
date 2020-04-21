@@ -1,6 +1,25 @@
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+import urllib.robotparser
+
+accepted_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stats.uci.edu"]
+
+prev_url = ""
+
+def web_trap_handler(url):
+    prev_url_parse = urlparse(prev_url)
+    url_parse = urlparse(url)
+    prev_url_path = prev_url_parse.path.split()
+    current_url_path = url_parse.path.split()
+    counter = 0
+    for i in range(len(prev_url_path)):
+        if prev_url_path[i] == current_url_path[i]:             
+            counter += 1                                        
+    if counter >= 3:                                            # if we encounter this problem 3 times, we're definitely trapped.
+        return True
+    else:
+        return False
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -8,6 +27,9 @@ def scraper(url, resp):
 
 def extract_next_links(url, resp):
     # Implementation requred.
+    if web_trap_handler(url):
+        return []
+    prev_url = url                                          
     links = []
     if resp.status in range(200,300):                       # we're getting a successful response from the url.
         content = resp.raw_response.content                 # grab the html content from the url
@@ -17,7 +39,7 @@ def extract_next_links(url, resp):
         for i in range(len(links)):                         # reformat all found links if needed
             links[i] = define_url(url, links[i])
         for link in links:
-            if is_valid(link) == False:
+            if check_valid_domain(url) == False or robot_checker(url) == False:
                 links.remove(link)
     return links
 
@@ -57,3 +79,27 @@ def define_url(base, path):
         return base_parsed.scheme + ":" + path
     else:
         return path
+
+def check_valid_domain(url):
+    parsed_url = urlparse(url)                                      
+    domain = parsed_url.netloc
+    path = parsed_url.path
+    if domain == "www.today.uci.edu":                               # check if our domain is www.today.uci.edu
+        if "/department/information_computer_science" in path:      # if it is.. only check if our /department/information_computer_science is a substring of our path
+            return True
+    else:
+        for d in accepted_domains:                  # check if one of the accepted domains is a substring of our url's domain
+            if d in domain:                         # since we are crawling through *.[accepted domains]/*
+                return True
+    return False
+
+def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
+    parsed_url = urlparse(url)
+    scheme = parsed_url.scheme                                  # grab our scheme [http/https]
+    domain = parsed_url.netloc                                  # our domain (where the robots.txt file will be)
+    
+    rp = urllib.robotparser.RobotFileParser()                   
+    robotFile = scheme + "://" + domain + "/robots.txt"         # [http/https]://[accepted domains]/robots.txt
+    rp.set_url(robotFile)
+    rp.read()
+    return rp.can_fetch("*", url)                               # check if we are allowed to go crawl our given url
