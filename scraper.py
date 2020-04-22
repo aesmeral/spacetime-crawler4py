@@ -7,13 +7,19 @@ accepted_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stats.u
 
 prev_url = ""
 
+def least_split_length(url1, url2):
+    ''' Returns the smallest length between two split urls'''
+    return min(len(url1), len(url2))
+
 def web_trap_handler(url):
+    global prev_url
     prev_url_parse = urlparse(prev_url)
     url_parse = urlparse(url)
-    prev_url_path = prev_url_parse.path.split()
-    current_url_path = url_parse.path.split()
+    prev_url_path = prev_url_parse.path.split('/')
+    current_url_path = url_parse.path.split('/')
+    min_len = least_split_length(prev_url_path, current_url_path) # Prevent IndexError
     counter = 0
-    for i in range(len(prev_url_path)):
+    for i in range(min_len):
         if prev_url_path[i] == current_url_path[i]:             
             counter += 1                                        
     if counter >= 3:                                            # if we encounter this problem 3 times, we're definitely trapped.
@@ -26,6 +32,7 @@ def scraper(url, resp):
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
+    global prev_url
     # Implementation requred.
     if web_trap_handler(url):
         return []
@@ -81,6 +88,7 @@ def define_url(base, path):
         return path
 
 def check_valid_domain(url):
+    global accepted_domains
     parsed_url = urlparse(url)                                      
     domain = parsed_url.netloc
     path = parsed_url.path
