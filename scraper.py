@@ -1,53 +1,31 @@
-import re
+import re, requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import urllib.robotparser
 
-accepted_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stats.uci.edu"]
 
-prev_url = ""
+visited = set()
 
 def least_split_length(url1, url2):
     ''' Returns the smallest length between two split urls'''
     return min(len(url1), len(url2))
 
-def web_trap_handler(url):
-    global prev_url
-    prev_url_parse = urlparse(prev_url)
-    url_parse = urlparse(url)
-    prev_url_path = prev_url_parse.path.split('/')
-    current_url_path = url_parse.path.split('/')
-    min_len = least_split_length(prev_url_path, current_url_path) # Prevent IndexError
-    counter = 0
-    for i in range(min_len):
-        if prev_url_path[i] == current_url_path[i]:             
-            counter += 1                                        
-    if counter >= 3:                                            # if we encounter this problem 3 times, we're definitely trapped.
-        return True
-    else:
-        return False
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    global prev_url
-    # Implementation requred.
-    if web_trap_handler(url):
-        return []
-    prev_url = url                                          
+    # Implementation requred.                                  
     links = []
     if resp.status in range(200,300):                       # we're getting a successful response from the url.
+        visited.add(url)                                    # add the url into our visited list
         content = resp.raw_response.content                 # grab the html content from the url
         soup = BeautifulSoup(content, "html.parser")        # soup the content
         for a in soup.find_all('a', href=True):             # find all links
-            links.append(a['href'])
-        for i in range(len(links)):                         # reformat all found links if needed
-            links[i] = define_url(url, links[i])
-        for link in links:
-            if check_valid_domain(url) == False or robot_checker(url) == False:
-                links.remove(link)
+            potential_url = define_url(url,a['href'])
+            if is_valid(potential_url) and check_valid_domain(potential_url) and potential_url not in visited:
+                links.append(potential_url)
     return links
 
 def is_valid(url):
@@ -55,15 +33,24 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
-        return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1"
-            + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+
+        #encountered a case "http://www.informatics.uci.edu/files/pdf/InformaticsBrochure-March2018" which was a pdf, but still output True
+        # so i modified this code a little bit. to where if it was a .extension or the extension existed in the path
+        extension_types = "(css|js|bmp|gif|jpe?g|ico|" \
+                          "png|tiff?|mid|mp2|mp3|mp4|" \
+                          "wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|" \
+                          "ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|" \
+                          "data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|" \
+                          "epub|dll|cnf|tgz|sha|" \
+                          "thmx|mso|arff|rtf|jar|csv|"\
+                          "rm|smil|wmv|swf|wma|zip|rar|gz)"
+
+        if re.search("(/)" + extension_types, parsed.path.lower()):
+            return False
+        if re.search("(.)" + extension_types, parsed.path.lower()):
+            return False
+        
+        return True
 
     except TypeError:
         print ("TypeError for ", parsed)
@@ -72,7 +59,7 @@ def is_valid(url):
 """
     base -> the url given from the frontier
     path -> url(s) from the frontier's html code
-    
+
     (1) if ... it has no scheme and it has no netloc, meaning that it must be in form --- /xyz --- (meaning that it is a path from the base url)
     (2) elif ... it has no scheme but is in form --- //*.asdfasdf.* (meaning that it might be another website but formated wrong)
     (3) it takes on the form of http://www.somewebsite.com/random... so just return it as is.
@@ -81,25 +68,25 @@ def define_url(base, path):
     base_parsed = urlparse(base)
     path_parsed = urlparse(path)
     if path_parsed.scheme == "" and path_parsed.netloc == "":
-        return base + path
+        new_base = base_parsed.scheme + "://" + base_parsed.netloc
+        return new_base + path
     elif path_parsed.scheme == "" and path_parsed.netloc is not "":
         return base_parsed.scheme + ":" + path
     else:
         return path
 
-def check_valid_domain(url):
-    global accepted_domains
-    parsed_url = urlparse(url)                                      
-    domain = parsed_url.netloc
-    path = parsed_url.path
-    if domain == "www.today.uci.edu":                               # check if our domain is www.today.uci.edu
-        if "/department/information_computer_science" in path:      # if it is.. only check if our /department/information_computer_science is a substring of our path
-            return True
+def ok_status(url):
+    r = requests.get(url)
+    if r.status_code in range(200,300):
+        return True
     else:
-        for d in accepted_domains:                  # check if one of the accepted domains is a substring of our url's domain
-            if d in domain:                         # since we are crawling through *.[accepted domains]/*
-                return True
-    return False
+        return False
+
+def check_valid_domain(url):
+    accepted_domains = "(\.ics\.uci\.edu|\.cs\.uci\.edu|informatics\.uci\.edu|\.stat\.uci\.edu|today\.uci\.edu\/department\/information_computer_sciences)"
+    if not re.search(accepted_domains,urlparse(url).netloc):
+        return False
+    return True
 
 def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
     parsed_url = urlparse(url)
