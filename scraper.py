@@ -6,6 +6,7 @@ import urllib.robotparser
 
 visited = set()
 stopwords = []
+sub_domain_ics = set()
 
 # check if theres any repeating path directory for instance: "https://www.example.com/abc/abc/abc/abc"
 def set_unique_page_count():
@@ -34,6 +35,12 @@ def add_visited_url(url):
     unique_file = open('unique.txt','a')    # 'a' is file mode to append
     unique_file.write(url+'\n')
     unique_file.close()
+
+def add_sub_domain_url(sub_domain):
+    ''' add our unique sub_domain to our sub_domain_list '''
+    sub_domain_list = open('sub_domain_list.txt', 'a')
+    sub_domain_list.write(sub_domain+'\n')
+    sub_domain_list.close()
 
 def get_visited_url_record():
     ''' Loads the list of previous urls from before this new session, from unique.txt '''
@@ -71,7 +78,7 @@ def scraper(url, resp):
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    # Implementation requred.                        
+    # Implementation requred.                  
     links = []
     if url in visited or in_web_trap(url) and not is_html_text(resp):
         return links
@@ -80,10 +87,11 @@ def extract_next_links(url, resp):
     print("Total URLs visited: {}".format(get_unique_page_count()))
     if resp.status in range(200,300):                               # we're getting a successful response from the url.
         content = resp.raw_response.content                         # grab the html content from the url
+        ics_subdomain(url)
         soup = BeautifulSoup(content, "html.parser")                # soup the content
         if low_information_page(soup):
+            print("low information")
             return links
-        
         for a in soup.find_all('a', href=True):                     # find all links
             potential_url = urllib.parse.urljoin(url,a['href'])
             if is_valid(potential_url) and check_valid_domain(potential_url) and potential_url not in visited and not in_web_trap(potential_url):
@@ -129,7 +137,6 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
-
 def check_valid_domain(url):
     # accept domains only from *.ics.uci.edu/ , *.cs.uci.edu , *.informatics.uci.edu , *.stat.uci.edu and the last one
     accepted_domains = "(\.ics\.uci\.edu|\.cs\.uci\.edu|\.informatics\.uci\.edu|\.stat\.uci\.edu|today\.uci\.edu\/department\/information_computer_sciences)"
@@ -155,7 +162,13 @@ def low_information_page(soup):
         return False
     except:
         return True
-
+def ics_subdomain(url):
+    domain = urlparse(url).netloc
+    if "ics.uci.edu" in domain:
+        domain_list = domain.split(".")
+        if domain_list[0].lower() not in sub_domain_ics:
+            sub_domain_ics.add(domain_list[0])
+            add_sub_domain_url(domain_list[0])
 "thinking of implementing this somewhere... "
 def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
     parsed_url = urlparse(url)
