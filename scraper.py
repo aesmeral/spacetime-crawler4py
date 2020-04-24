@@ -38,9 +38,26 @@ def add_visited_url(url):
 
 def add_sub_domain_url(sub_domain):
     ''' add our unique sub_domain to our sub_domain_list '''
+    sub_domain_name = urlparse(sub_domain).netloc.split(".")[0]
+    sub_domain_counter(sub_domain_name)
     sub_domain_list = open('sub_domain_list.txt', 'a')
     sub_domain_list.write(sub_domain+'\n')
     sub_domain_list.close()
+
+def sub_domain_counter(sub_domain):
+    content = get_sub_domain_counter(sub_domain)
+    count_file = open(sub_domain + ".txt", 'w')
+    count_file.write(str(int(content) + 1))
+    count_file.close()
+
+def get_sub_domain_counter(sub_domain):
+    try:
+        count_file = open(sub_domain + ".txt", 'r')
+        count = count_file.read()
+        count_file
+        return count
+    except FileNotFoundError:
+        return '0'
 
 def get_visited_url_record():
     ''' Loads the list of previous urls from before this new session, from unique.txt '''
@@ -163,12 +180,14 @@ def low_information_page(soup):
     except:
         return True
 def ics_subdomain(url):
+    scheme = urlparse(url).scheme
     domain = urlparse(url).netloc
+    parsed_url = scheme + "://" + domain 
     if "ics.uci.edu" in domain:
         domain_list = domain.split(".")
-        if domain_list[0].lower() not in sub_domain_ics:
-            sub_domain_ics.add(domain_list[0])
-            add_sub_domain_url(domain_list[0])
+        if  parsed_url not in sub_domain_ics:
+            sub_domain_ics.add(parsed_url)
+            add_sub_domain_url(parsed_url)
 "thinking of implementing this somewhere... "
 def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
     parsed_url = urlparse(url)
