@@ -7,9 +7,7 @@ import urllib.robotparser
 visited = set()
 stopwords = []
 
-<<<<<<< HEAD
 # check if theres any repeating path directory for instance: "https://www.example.com/abc/abc/abc/abc"
-=======
 def set_unique_page_count():
     ''' Stores number of unique pages visited in a file so count does not reset
     if a crawl is stopped and started at a different time. '''
@@ -26,7 +24,6 @@ def get_unique_page_count():
     count_file.close()
     return count
 
->>>>>>> 6d61fece7225ea50ce06b2d6ff148c81fa465831
 def in_web_trap(url):
     parsed = urlparse(url)
     path_list = parsed.path[1:].split('/')
