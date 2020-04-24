@@ -38,13 +38,12 @@ def add_visited_url(url):
 
 def add_sub_domain_url(sub_domain):
     ''' add our unique sub_domain to our sub_domain_list '''
-    sub_domain_name = urlparse(sub_domain).netloc.split(".")[0]
-    sub_domain_counter(sub_domain_name)
     sub_domain_list = open('sub_domain_list.txt', 'a')
     sub_domain_list.write(sub_domain+'\n')
     sub_domain_list.close()
 
 def sub_domain_counter(sub_domain):
+    sub_domain = urlparse(sub_domain).netloc.split(".")[0]
     content = get_sub_domain_counter(sub_domain)
     count_file = open(sub_domain + ".txt", 'w')
     count_file.write(str(int(content) + 1))
@@ -185,6 +184,7 @@ def ics_subdomain(url):
     parsed_url = scheme + "://" + domain 
     if "ics.uci.edu" in domain:
         domain_list = domain.split(".")
+        sub_domain_counter(parsed_url)
         if  parsed_url not in sub_domain_ics:
             sub_domain_ics.add(parsed_url)
             add_sub_domain_url(parsed_url)
