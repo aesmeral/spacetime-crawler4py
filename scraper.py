@@ -12,17 +12,40 @@ def set_unique_page_count():
     ''' Stores number of unique pages visited in a file so count does not reset
     if a crawl is stopped and started at a different time. '''
     global visited
-    count_file = open('unique_count.txt','w+')
-    prev_count = int(count_file.read())
-    count_file.write(str(len(visited)+prev_count))
+    content = get_unique_page_count()       # Get string page count
+    count_file = open('unique_count.txt','w')
+    count_file.write(str(int(content)+1))
     count_file.close()
 
 def get_unique_page_count():
     ''' Returns number of unique pages visited, tracked in a text file. '''
-    count_file = open('unique_count.txt','r')   # contains string count of urls visited. (cast int if needed)
-    count = count_file.read()
-    count_file.close()
-    return count
+    try:
+        count_file = open('unique_count.txt','r')   # contains string count of urls visited
+        count = count_file.read()
+        count_file.close()
+        return count
+    except FileNotFoundError:
+        return '0'       # No file yet means no page counted yet.
+
+def add_visited_url(url):
+    ''' Adds the url to the visited list and stores it in unique.txt '''
+    global visited
+    visited.add(url)
+    unique_file = open('unique.txt','a')    # 'a' is file mode to append
+    unique_file.write(url+'\n')
+    unique_file.close()
+
+def get_visited_url_record():
+    ''' Loads the list of previous urls from before this new session, from unique.txt '''
+    global visited
+    try:
+        unique_file = open('unique.txt','r')
+        content = unique_file.readlines()           # Returns list of file contents, split by newline characters. (eg. ['anthony\n','is\n','cool\n'])
+        for line in content:
+            visited.add(line.split('\n')[0])     # Each visited url is written with a newline, so we only want the first index of the split. (eg. ['ics.uci.edu',''])
+        unique_file.close()
+    except FileNotFoundError:
+        pass        # First time loading, do nothing
 
 def in_web_trap(url):
     parsed = urlparse(url)
@@ -43,6 +66,7 @@ def is_html_text(resp):
         return False
 
 def scraper(url, resp):
+    get_visited_url_record()            # Loads visited urls from unique.txt
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
@@ -51,7 +75,7 @@ def extract_next_links(url, resp):
     links = []
     if url in visited or in_web_trap(url) and not is_html_text(resp):
         return links
-    visited.add(url)
+    add_visited_url(url)                # Add url to visited list and record
     set_unique_page_count()                                         # Keep track of unique urls
     print("Total URLs visited: {}".format(get_unique_page_count()))
     if resp.status in range(200,300):                               # we're getting a successful response from the url.
