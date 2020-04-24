@@ -7,6 +7,22 @@ import urllib.robotparser
 visited = set()
 stopwords = []
 
+def set_unique_page_count():
+    ''' Stores number of unique pages visited in a file so count does not reset
+    if a crawl is stopped and started at a different time. '''
+    global visited
+    count_file = open('unique_count.txt','w+')
+    prev_count = int(count_file.read())
+    count_file.write(str(len(visited)+prev_count))
+    count_file.close()
+
+def get_unique_page_count():
+    ''' Returns number of unique pages visited, tracked in a text file. '''
+    count_file = open('unique_count.txt','r')   # contains string count of urls visited. (cast int if needed)
+    count = count_file.read()
+    count_file.close()
+    return count
+
 def in_web_trap(url):
     parsed = urlparse(url)
     path_list = parsed.path[1:].split('/')
@@ -34,11 +50,14 @@ def extract_next_links(url, resp):
     if url in visited or in_web_trap(url) and not is_html_text(resp):
         return links
     visited.add(url)
+    set_unique_page_count()                                         # Keep track of unique urls
+    print("Total URLs visited: {}".format(get_unique_page_count()))
     if resp.status in range(200,300):                               # we're getting a successful response from the url.
         content = resp.raw_response.content                         # grab the html content from the url
         soup = BeautifulSoup(content, "html.parser")                # soup the content
         if low_information_page(soup):
             return links
+        
         for a in soup.find_all('a', href=True):                     # find all links
             potential_url = urllib.parse.urljoin(url,a['href'])
             if is_valid(potential_url) and check_valid_domain(potential_url) and potential_url not in visited and not in_web_trap(potential_url):
