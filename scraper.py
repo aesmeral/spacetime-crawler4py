@@ -7,6 +7,7 @@ import urllib.robotparser
 visited = set()
 stopwords = []
 
+# check if theres any repeating path directory for instance: "https://www.example.com/abc/abc/abc/abc"
 def in_web_trap(url):
     parsed = urlparse(url)
     path_list = parsed.path[1:].split('/')
@@ -15,6 +16,7 @@ def in_web_trap(url):
     else:
         return False
 
+# we only wanna scrape if our content type is a text or html? (pdf/applications are sometimes links we dont want)
 def is_html_text(resp):
     try:
         if re.search("text|html", resp.raw_response.headers['content-type']) is not None:
@@ -23,7 +25,7 @@ def is_html_text(resp):
             return False
     except:
         return False
-        
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
@@ -43,7 +45,6 @@ def extract_next_links(url, resp):
             potential_url = urllib.parse.urljoin(url,a['href'])
             if is_valid(potential_url) and check_valid_domain(potential_url) and potential_url not in visited and not in_web_trap(potential_url):
                 links.append(potential_url)
-        prev_resp = content
     return links
 
 def is_valid(url):
@@ -60,7 +61,7 @@ def is_valid(url):
                           "wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|" \
                           "ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|" \
                           "data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|" \
-                          "epub|dll|cnf|tgz|sha|apk" \
+                          "epub|dll|cnf|tgz|sha|apk|" \
                           "thmx|mso|arff|rtf|jar|csv|"\
                           "rm|smil|wmv|swf|wma|zip|rar|gz|war)"
 
@@ -101,17 +102,18 @@ def low_information_page(soup):
             for line in fd:
                 stopwords.append(line.replace("\n",""))
     try:
-        content = "".join([p.text for p in soup.find_all("p")])                 # get all the text within a p tag (meat of the website)
+        content = " ".join([p.text for p in soup.find_all("p")])                # get all the text within a p tag (meat of the website)
         content = content.split()                                               # split it into a list
         for token in content:                                                   
             if token not in stopwords:                                          # if the token is not a stop word then...
                 token_list.append(token)
-        if len(content) < 150 or (len(token_list)/len(content) < 0.25):         # if we dont have alot of words then probably dont use it.
+        if len(content) < 50 or (len(token_list)/len(content) < 0.25):         # if we dont have alot of words then probably dont use it.
             return True
         return False
     except:
         return True
 
+"thinking of implementing this somewhere... "
 def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
     parsed_url = urlparse(url)
     scheme = parsed_url.scheme                                  # grab our scheme [http/https]
