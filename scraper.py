@@ -1,4 +1,4 @@
-import re, requests
+import re, requests, string, json
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import urllib.robotparser
@@ -6,7 +6,12 @@ import urllib.robotparser
 
 visited = set()
 stopwords = []
-sub_domain_ics = set()
+frequency_table = dict()
+ics_sub_domain_freq = dict()
+
+largest_file  = []
+largest_file_url = ""
+Changed = False 
 
 # check if theres any repeating path directory for instance: "https://www.example.com/abc/abc/abc/abc"
 def set_unique_page_count():
@@ -36,27 +41,10 @@ def add_visited_url(url):
     unique_file.write(url+'\n')
     unique_file.close()
 
-def add_sub_domain_url(sub_domain):
-    ''' add our unique sub_domain to our sub_domain_list '''
-    sub_domain_list = open('sub_domain_list.txt', 'a')
-    sub_domain_list.write(sub_domain+'\n')
-    sub_domain_list.close()
-
-def sub_domain_counter(sub_domain):
-    sub_domain = urlparse(sub_domain).netloc.split(".")[0]
-    content = get_sub_domain_counter(sub_domain)
-    count_file = open(sub_domain + ".txt", 'w')
-    count_file.write(str(int(content) + 1))
-    count_file.close()
-
-def get_sub_domain_counter(sub_domain):
-    try:
-        count_file = open(sub_domain + ".txt", 'r')
-        count = count_file.read()
-        count_file
-        return count
-    except FileNotFoundError:
-        return '0'
+def save_domain_file():
+    subdomain_list = open('sub_domain_info.txt', 'w+')
+    json.dump(ics_sub_domain_freq,subdomain_list)
+    subdomain_list.close()
 
 def get_visited_url_record():
     ''' Loads the list of previous urls from before this new session, from unique.txt '''
@@ -69,6 +57,15 @@ def get_visited_url_record():
         unique_file.close()
     except FileNotFoundError:
         pass        # First time loading, do nothing
+
+def save_freqtable_and_largest():
+    file = open("freqtable.txt", 'w+')
+    json.dump(frequency_table,file)
+    file.close()
+    file = open('largest.txt', 'w+')
+    file.write(str(len(largest_file)) + '\n')
+    file.write(largest_file_url)
+    file.close()
 
 def in_web_trap(url):
     parsed = urlparse(url)
@@ -94,7 +91,9 @@ def scraper(url, resp):
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    # Implementation requred.                  
+    # Implementation requred.
+    global Changed        
+    global largest_file_url          
     links = []
     if url in visited or in_web_trap(url) and not is_html_text(resp):
         return links
@@ -108,6 +107,9 @@ def extract_next_links(url, resp):
         if low_information_page(soup):
             print("low information")
             return links
+        if Changed:
+            Changed = False
+            largest_file_url = url
         for a in soup.find_all('a', href=True):                     # find all links
             potential_url = urllib.parse.urljoin(url,a['href'])
             if is_valid(potential_url) and check_valid_domain(potential_url) and potential_url not in visited and not in_web_trap(potential_url):
@@ -162,32 +164,44 @@ def check_valid_domain(url):
 
 def low_information_page(soup):
     global stopwords
+    global Changed
+    global largest_file
+
     token_list = []
     if stopwords == []:
         with open("stopwords.txt", 'r') as fd:
             for line in fd:
                 stopwords.append(line.replace("\n",""))
+            for i in range(len(stopwords)):
+                stopwords[i] = stopwords[i].translate(str.maketrans(string.punctuation,' ' * len(string.punctuation)))
     try:
         content = " ".join([p.text for p in soup.find_all("p")])                # get all the text within a p tag (meat of the website)
-        content = content.split()                                               # split it into a list
+        content = tokenize(content)
         for token in content:                                                   
             if token not in stopwords:                                          # if the token is not a stop word then...
                 token_list.append(token)
         if len(content) < 50 or (len(token_list)/len(content) < 0.25):         # if we dont have alot of words then probably dont use it.
             return True
+        computeWordFrequencies(token_list)
+        if len(token_list) >= len(largest_file):
+            Changed = True
+            largest_file = token_list
+            save_freqtable_and_largest()
         return False
     except:
         return True
 def ics_subdomain(url):
+    global ics_sub_domain_freq
     scheme = urlparse(url).scheme
     domain = urlparse(url).netloc
-    parsed_url = scheme + "://" + domain 
     if "ics.uci.edu" in domain:
         domain_list = domain.split(".")
-        sub_domain_counter(parsed_url)
-        if  parsed_url not in sub_domain_ics:
-            sub_domain_ics.add(parsed_url)
-            add_sub_domain_url(parsed_url)
+        if domain_list[0].lower() in ics_sub_domain_freq:
+            ics_sub_domain_freq[domain_list[0].lower()] = ics_sub_domain_freq[domain_list[0].lower()] + 1
+        else:
+            ics_sub_domain_freq[domain_list[0].lower()] = 1
+        save_domain_file()
+
 "thinking of implementing this somewhere... "
 def robot_checker(url):                                         # robot checker (refer to docs.python.org/3/library/urllib.robotparser.html)
     parsed_url = urlparse(url)
@@ -199,3 +213,34 @@ def robot_checker(url):                                         # robot checker 
     rp.set_url(robotFile)
     rp.read()
     return rp.can_fetch("*", url)                               # check if we are allowed to go crawl our given url
+
+
+def tokenize(content) -> list:
+    tokens = []
+    more_restrictful_alphanum = re.compile(r'^[0-9A-Za-z]*$')               # alphanum() allows non-english characters
+    content = content.translate(str.maketrans(string.punctuation,' ' * len(string.punctuation)))   # treat all punctuation's as spaces.
+    content = content.split()                                               # convert our string into a list of tokens.
+    for token in content:                                                   # iterate through our raw tokens
+        if len(token) >= 2 and more_restrictful_alphanum.match(token):      # only add the "token" to our tokens list if
+            tokens.append(token.lower())                                    # it satisfies our constraint
+    return tokens                                                           
+""" 
+    count how many times a word occurs within our list of tokens. 
+    input: list
+    output: dict
+
+    runtime complexity:
+        iterating through tokens = O(n)
+            checking if token is in table = O(1)
+                adding/updating values in table = O(1)
+        Therefore, our algorithm complexity is O(n)
+
+        tldr: O(n)
+"""
+def computeWordFrequencies(tokens) -> dict:
+    global frequency_table                                                      # create our dictionary
+    for token in tokens:                                                        # for every token in tokens
+        if token in frequency_table:                                            # if our token is in the table already
+            frequency_table[token] = frequency_table[token] + 1                 # add one to the current value
+        else:
+            frequency_table[token] = 1                                          # else just start a new one
